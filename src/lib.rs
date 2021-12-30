@@ -1,36 +1,114 @@
+//! Iterators to traverse tree-sitter [`Tree`]s using a [`TreeCursor`],
+//! with a [`Cursor`] trait to allow for traversing arbitrary n-ary trees.
+//!
+//!
+//! # Examples
+//!
+//! Basic usage:
+//!
+//! ```
+//! use tree_sitter::{Node, Tree};
+//! use std::collections::HashSet;
+//! use std::iter::FromIterator;
+//!
+//! use tree_sitter_traversal::{traverse, traverse_tree, Order};
+//!
+//! // Non-existent method, imagine it gets a valid Tree with >1 node
+//! let tree: Tree = get_tree();
+//! let preorder: Vec<Node<'_>> = traverse(tree.walk(), Order::Pre).collect::<Vec<_>>();
+//! let postorder: Vec<Node<'_>> = traverse_tree(&tree, Order::Post).collect::<Vec<_>>();
+//! // For any tree with more than just a root node,
+//! // the order of preorder and postorder will be different
+//! assert_ne!(preorder, postorder);
+//! // However, they will have the same amount of nodes
+//! assert_eq!(preorder.len(), postorder.len());
+//! // Specifically, they will have the exact same nodes, just in a different order
+//! assert_eq!(
+//!     <HashSet<_>>::from_iter(preorder.into_iter()),
+//!     <HashSet<_>>::from_iter(postorder.into_iter())
+//! );
+//! ```
+//!
+//! [`Tree`]: tree_sitter::Tree
+//! [`TreeCursor`]: tree_sitter::TreeCursor
+//! [`Cursor`]: crate::Cursor
+
 use tree_sitter::{Parser, TreeCursor, Node, Tree};
+use std::iter::FusedIterator;
 
-
+/// Trait which represents a stateful cursor in a n-ary tree.
+/// The cursor can be moved between nodes in the tree by the given methods,
+/// and the node which the cursor is currently pointing at can be read as well.
 pub trait Cursor {
-    type NodeT;
+    /// The type of the nodes which the cursor points at; the cursor is always pointing
+    /// at exactly one of this type.
+    type Node;
+
+    /// Move this cursor to the first child of its current node.
+    ///
+    /// This returns `true` if the cursor successfully moved, and returns `false`
+    /// if there were no children.
     fn goto_first_child(&mut self) -> bool;
-    fn goto_next_sibling(&mut self) -> bool;
+
+    /// Move this cursor to the parent of its current node.
+    ///
+    /// This returns `true` if the cursor successfully moved, and returns `false`
+    /// if there was no parent node (the cursor was already on the root node).
     fn goto_parent(&mut self) -> bool;
-    fn node(&self) -> Self::NodeT;
+
+    /// Move this cursor to the next sibling of its current node.
+    ///
+    /// This returns `true` if the cursor successfully moved, and returns `false`
+    /// if there was no next sibling node.
+    fn goto_next_sibling(&mut self) -> bool;
+
+    /// Get the node which the cursor is currently pointing at.
+    fn node(&self) -> Self::Node;
 }
 
-impl<'a> Cursor for TreeCursor<'a> {
-    type NodeT = Node<'a>;
+impl<'a, T> Cursor for &'a mut T where T: Cursor {
+    type Node = T::Node;
 
     fn goto_first_child(&mut self) -> bool {
-        self.goto_first_child()
+        T::goto_first_child(self)
+    }
+
+    fn goto_parent(&mut self) -> bool {
+        T::goto_parent(self)
     }
 
     fn goto_next_sibling(&mut self) -> bool {
-        self.goto_next_sibling()
+        T::goto_next_sibling(self)
+    }
+
+    fn node(&self) -> Self::Node {
+        T::node(self)
+    }
+}
+
+/// Quintessential implementation of Cursor for tree-sitter's TreeCursor
+impl<'a> Cursor for TreeCursor<'a> {
+    type Node = Node<'a>;
+
+    fn goto_first_child(&mut self) -> bool {
+        self.goto_first_child()
     }
 
     fn goto_parent(&mut self) -> bool {
         self.goto_parent()
     }
 
-    fn node(&self) -> Self::NodeT {
+    fn goto_next_sibling(&mut self) -> bool {
+        self.goto_next_sibling()
+    }
+
+    fn node(&self) -> Self::Node {
         self.node()
     }
 }
 
-/// Order to iterate through the tree; for n-ary trees only
-/// Pre-order and Post-order make sense
+/// Order to iterate through a n-ary tree; for n-ary trees only
+/// Pre-order and Post-order make sense.
 #[derive(Eq, PartialEq, Hash, Debug, Copy, Clone)]
 pub enum Order {
     Pre,
@@ -41,8 +119,7 @@ pub enum Order {
 /// PreorderTraversal and PostorderTraversal, as they both will call the exact same
 /// cursor methods in the exact same order as this function for a given tree; the order
 /// is also the same as traverse_recursive.
-fn traverse_iterative<'a, F>(tree: &'a Tree, order: Order, mut cb: F) where F: FnMut(Node<'a>) {
-    let mut c = tree.walk();
+fn traverse_iterative<C: Cursor, F>(mut c: C, order: Order, mut cb: F) where F: FnMut(C::Node) {
     loop {
         // This is the first time we've encountered the node, so we'll call if preorder
         if order == Order::Pre { cb(c.node()); }
@@ -88,11 +165,11 @@ fn traverse_iterative<'a, F>(tree: &'a Tree, order: Order, mut cb: F) where F: F
 
 /// Idiomatic recursive traversal of the tree; this version is easier to understand
 /// conceptually, but the recursion is actually unnecessary and can cause stack overflow.
-fn traverse_recursive<'a, F>(tree: &'a Tree, order: Order, mut cb: F) where F: FnMut(Node<'a>) {
-    traverse_helper(&mut tree.walk(), order, &mut cb);
+fn traverse_recursive<C: Cursor, F>(mut c: C, order: Order, mut cb: F) where F: FnMut(C::Node) {
+    traverse_helper(&mut c, order, &mut cb);
 }
 
-fn traverse_helper<'a, F>(c: &mut TreeCursor<'a>, order: Order, cb: &mut F) where F: FnMut(Node<'a>) {
+fn traverse_helper<C: Cursor, F>(c: &mut C, order: Order, cb: &mut F) where F: FnMut(C::Node) {
     // If preorder, call the callback when we first touch the node
     if order == Order::Pre {
         cb(c.node());
@@ -128,7 +205,7 @@ impl<C> PreorderTraverse<C> {
 }
 
 impl<C> Iterator for PreorderTraverse<C> where C: Cursor {
-    type Item = C::NodeT;
+    type Item = C::Node;
 
     fn next(&mut self) -> Option<Self::Item> {
         let c = match self.cursor.as_mut() {
@@ -183,7 +260,7 @@ impl<C> PostorderTraverse<C> {
 }
 
 impl<C> Iterator for PostorderTraverse<C> where C: Cursor {
-    type Item = C::NodeT;
+    type Item = C::Node;
 
     fn next(&mut self) -> Option<Self::Item> {
         let c = match self.cursor.as_mut() {
@@ -220,6 +297,7 @@ impl<C> Iterator for PostorderTraverse<C> where C: Cursor {
     }
 }
 
+// Used for visibility purposes, in case this struct becomes public
 struct Traverse<C> {
     inner: TraverseInner<C>
 }
@@ -240,21 +318,31 @@ impl<C> Traverse<C> {
 }
 
 impl<'a> Traverse<TreeCursor<'a>> {
+    #[allow(dead_code)]
     pub fn from_tree(tree: &'a Tree, order: Order) -> Self {
         Traverse::new(tree.walk(), order)
     }
 }
 
-pub fn traverse_iter_tree(tree: &Tree, order: Order) -> impl Iterator<Item=Node> {
-    return Traverse::from_tree(tree, order);
+/// Convenience method to traverse a tree-sitter [`Tree`] in an order according to `order`.
+///
+/// [`Tree`]: tree_sitter::Tree
+pub fn traverse_tree(tree: &Tree, order: Order) -> impl FusedIterator<Item=Node> {
+    return traverse(tree.walk(), order);
 }
 
-pub fn traverse_iter<C: Cursor>(c: C, order: Order) -> impl Iterator<Item=C::NodeT> {
-    return Traverse::new(c, order)
+/// Traverse an n-ary tree using `cursor`, returning the nodes of the tree through an iterator
+/// in an order according to `order`.
+///
+/// `cursor` must be at the root of the tree
+/// (i.e. `cursor.goto_parent()` must return false)
+pub fn traverse<C: Cursor>(mut cursor: C, order: Order) -> impl FusedIterator<Item=C::Node> {
+    assert!(!cursor.goto_parent());
+    return Traverse::new(cursor, order)
 }
 
 impl<C> Iterator for Traverse<C> where C: Cursor {
-    type Item = C::NodeT;
+    type Item = C::Node;
 
     fn next(&mut self) -> Option<Self::Item> {
         match self.inner {
@@ -264,64 +352,106 @@ impl<C> Iterator for Traverse<C> where C: Cursor {
     }
 }
 
+// We know that PreorderTraverse and PostorderTraverse are fused due to their implementation,
+// so we can add this bound for free.
+impl<C> FusedIterator for Traverse<C> where C: Cursor {}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn get_tree() -> Tree {
-        let code =
+    const EX1: &str =
+r#"function double(x) {
+    return 2 * x;
+}"#;
+
+    const EX2: &str =
 r#"
+// Intentionally invalid code below
+
+"123
+
 const DOUBLE = 2;
 
-function double(x, y, z=123) {
+function double(x) {
     return DOUBLE * x;
 }"#;
+
+    const EX3: &str = "";
+
+    /// For a given tree and iteration order, verify that the two callback approaches
+    /// and the Iterator approach are all equivalent
+    fn generate_traversals(tree: &Tree, order: Order) {
+        let mut recursive_callback = Vec::new();
+        traverse_recursive(tree.walk(), order, |n| recursive_callback.push(n));
+        let mut iterative_callback = Vec::new();
+        traverse_iterative(tree.walk(), order, |n| iterative_callback.push(n));
+        let iterator = traverse(tree.walk(), order).collect::<Vec<_>>();
+
+        assert_eq!(recursive_callback, iterative_callback);
+        assert_eq!(iterative_callback, iterator);
+    }
+
+
+    /// Helper function to generate a Tree from javascript
+    fn get_tree(code: &str) -> Tree {
         let mut parser = Parser::new();
         let lang = tree_sitter_javascript::language();
         parser.set_language(lang).expect("Error loading JavaScript grammar");
-        return parser.parse(code, None).unwrap();
+        return parser.parse(code, None).expect("Error parsing provided code");
     }
 
     #[test]
-    fn repeat() {
-        let parsed = get_tree();
-        traverse_recursive(&parsed, Order::Post, |node| {eprintln!("{:?}", node)});
+    fn test_equivalence() {
+        for code in [EX1, EX2, EX3] {
+            let tree = get_tree(code);
+            for order in [Order::Pre, Order::Post] {
+                generate_traversals(&tree, order);
+            }
+        }
     }
 
     #[test]
-    fn preorder_eq() {
-        let parsed = get_tree();
-        let mut v = Vec::new();
-        traverse_recursive(&parsed, Order::Pre, |node| {v.push(node)});
-        let mut e = Vec::new();
-        traverse_iterative(&parsed, Order::Pre, |node| {e.push(node)});
-        assert_eq!(e, v);
-        eprintln!("{:?}", e);
+    fn test_postconditions() {
+        let parsed = get_tree(EX1);
+        let mut walk = parsed.walk();
+        for order in [Order::Pre, Order::Post] {
+            let mut iter = traverse(&mut walk, order);
+            while iter.next().is_some() {}
+            // Make sure it's fused
+            assert!(iter.next().is_none());
+            // Really make sure it's fused
+            assert!(iter.next().is_none());
+            drop(iter);
+            // Verify that the walk is reset to the root_node and can be reused
+            assert_eq!(walk.node(), parsed.root_node());
+        }
     }
 
     #[test]
-    fn new_eq() {
-        let parsed = get_tree();
-        let t = traverse_iter_tree(&parsed, Order::Pre);
-        let v = t.collect::<Vec<_>>();
-        let mut e = Vec::new();
-        eprintln!("{:?}", parsed.root_node().to_sexp());
-        traverse_recursive(&parsed, Order::Pre, |node| {e.push(node)});
-        assert_eq!(v, e);
-        eprintln!("{:?}", v);
-        "(program (function_declaration name: (identifier) parameters: (formal_parameters (identifier)) body: (statement_block)))";
+    #[should_panic]
+    fn test_panic() {
+        // Tests that the precondition check works
+        let parsed = get_tree(EX1);
+        let mut walk = parsed.walk();
+        walk.goto_first_child();
+        let iter = traverse(&mut walk, Order::Pre);
+        iter.count();
     }
 
     #[test]
-    fn postorder_eq() {
-        let parsed = get_tree();
-        let t = traverse_iter(parsed.walk(), Order::Post);
-        let v = t.collect::<Vec<_>>();
-        let mut e = Vec::new();
-        eprintln!("{:?}", parsed.root_node().to_sexp());
-        traverse_iterative(&parsed, Order::Post, |node| {e.push(node)});
-        assert_eq!(v, e);
-        eprintln!("{:?}", v);
-        "(program (function_declaration name: (identifier) parameters: (formal_parameters (identifier)) body: (statement_block)))";
+    fn example() {
+        use tree_sitter::{Node, Tree};
+        use std::collections::HashSet;
+        use std::iter::FromIterator;
+        let tree: Tree = get_tree(EX1);
+        let preorder: Vec<Node<'_>> = traverse(tree.walk(), Order::Pre).collect::<Vec<_>>();
+        let postorder: Vec<Node<'_>> = traverse_tree(&tree, Order::Post).collect::<Vec<_>>();
+        assert_ne!(preorder, postorder);
+        assert_eq!(preorder.len(), postorder.len());
+        assert_eq!(
+            <HashSet<_>>::from_iter(preorder.into_iter()),
+            <HashSet<_>>::from_iter(postorder.into_iter())
+        );
     }
 }
