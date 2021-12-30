@@ -18,6 +18,7 @@ tree-sitter = {version=">= 0.19, < 0.21", optional=true}
 
 [dev-dependencies]
 tree-sitter-javascript = "0.20.0"
+tree-sitter-rust = "0.20.0"
 
 [features]
 default = ["tree-sitter"]
