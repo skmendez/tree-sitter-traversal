@@ -18,5 +18,7 @@ jobs:
     - uses: actions/checkout@v2
     - name: Build
       run: cargo build --verbose
+    - name: Build without tree-sitter
+      run: cargo build --no-default-features
     - name: Run tests
       run: cargo test --verbose

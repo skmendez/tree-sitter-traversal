@@ -7,6 +7,8 @@
 //! Basic usage:
 //!
 //! ```
+//! # #[cfg(feature = "tree-sitter")]
+//! # {
 //! use tree_sitter::{Node, Tree};
 //! use std::collections::HashSet;
 //! use std::iter::FromIterator;
@@ -34,6 +36,7 @@
 //!     <HashSet<_>>::from_iter(preorder.into_iter()),
 //!     <HashSet<_>>::from_iter(postorder.into_iter())
 //! );
+//! # }
 //! ```
 //!
 //! [`Tree`]: tree_sitter::Tree
@@ -41,7 +44,6 @@
 //! [`Cursor`]: crate::Cursor
 
 use std::iter::FusedIterator;
-use tree_sitter::{Node, Tree, TreeCursor};
 
 /// Trait which represents a stateful cursor in a n-ary tree.
 /// The cursor can be moved between nodes in the tree by the given methods,
@@ -96,9 +98,13 @@ where
     }
 }
 
-/// Quintessential implementation of Cursor for tree-sitter's TreeCursor
-impl<'a> Cursor for TreeCursor<'a> {
-    type Node = Node<'a>;
+/// Quintessential implementation of [`Cursor`] for tree-sitter's [`TreeCursor`]
+///
+/// [`TreeCursor`]: tree_sitter::TreeCursor
+/// [`Cursor`]: crate::Cursor
+#[cfg(feature = "tree-sitter")]
+impl<'a> Cursor for tree_sitter::TreeCursor<'a> {
+    type Node = tree_sitter::Node<'a>;
 
     fn goto_first_child(&mut self) -> bool {
         self.goto_first_child()
@@ -355,9 +361,10 @@ impl<C> Traverse<C> {
     }
 }
 
-impl<'a> Traverse<TreeCursor<'a>> {
+#[cfg(feature = "tree-sitter")]
+impl<'a> Traverse<tree_sitter::TreeCursor<'a>> {
     #[allow(dead_code)]
-    pub fn from_tree(tree: &'a Tree, order: Order) -> Self {
+    pub fn from_tree(tree: &'a tree_sitter::Tree, order: Order) -> Self {
         Traverse::new(tree.walk(), order)
     }
 }
@@ -365,7 +372,11 @@ impl<'a> Traverse<TreeCursor<'a>> {
 /// Convenience method to traverse a tree-sitter [`Tree`] in an order according to `order`.
 ///
 /// [`Tree`]: tree_sitter::Tree
-pub fn traverse_tree(tree: &Tree, order: Order) -> impl FusedIterator<Item = Node> {
+#[cfg(feature = "tree-sitter")]
+pub fn traverse_tree(
+    tree: &tree_sitter::Tree,
+    order: Order,
+) -> impl FusedIterator<Item = tree_sitter::Node> {
     return traverse(tree.walk(), order);
 }
 
@@ -398,9 +409,10 @@ where
 impl<C> FusedIterator for Traverse<C> where C: Cursor {}
 
 #[cfg(test)]
+#[cfg(feature = "tree-sitter")]
 mod tests {
     use super::*;
-    use tree_sitter::Parser;
+    use tree_sitter::{Parser, Tree};
 
     const EX1: &str = r#"function double(x) {
     return 2 * x;
