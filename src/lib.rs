@@ -12,6 +12,13 @@
 //! use std::iter::FromIterator;
 //!
 //! use tree_sitter_traversal::{traverse, traverse_tree, Order};
+//! # fn get_tree() -> Tree {
+//! #     use tree_sitter::Parser;
+//! #     let mut parser = Parser::new();
+//! #     let lang = tree_sitter_javascript::language();
+//! #     parser.set_language(lang).expect("Error loading JavaScript grammar");
+//! #     return parser.parse("function(x) { return x * 2; }", None).expect("Error parsing provided code");
+//! # }
 //!
 //! // Non-existent method, imagine it gets a valid Tree with >1 node
 //! let tree: Tree = get_tree();
@@ -33,8 +40,8 @@
 //! [`TreeCursor`]: tree_sitter::TreeCursor
 //! [`Cursor`]: crate::Cursor
 
-use tree_sitter::{Parser, TreeCursor, Node, Tree};
 use std::iter::FusedIterator;
+use tree_sitter::{Node, Tree, TreeCursor};
 
 /// Trait which represents a stateful cursor in a n-ary tree.
 /// The cursor can be moved between nodes in the tree by the given methods,
@@ -66,7 +73,10 @@ pub trait Cursor {
     fn node(&self) -> Self::Node;
 }
 
-impl<'a, T> Cursor for &'a mut T where T: Cursor {
+impl<'a, T> Cursor for &'a mut T
+where
+    T: Cursor,
+{
     type Node = T::Node;
 
     fn goto_first_child(&mut self) -> bool {
@@ -112,17 +122,23 @@ impl<'a> Cursor for TreeCursor<'a> {
 #[derive(Eq, PartialEq, Hash, Debug, Copy, Clone)]
 pub enum Order {
     Pre,
-    Post
+    Post,
 }
 
 /// Iterative traversal of the tree; serves as a reference for both
 /// PreorderTraversal and PostorderTraversal, as they both will call the exact same
 /// cursor methods in the exact same order as this function for a given tree; the order
 /// is also the same as traverse_recursive.
-fn traverse_iterative<C: Cursor, F>(mut c: C, order: Order, mut cb: F) where F: FnMut(C::Node) {
+#[allow(dead_code)]
+fn traverse_iterative<C: Cursor, F>(mut c: C, order: Order, mut cb: F)
+where
+    F: FnMut(C::Node),
+{
     loop {
         // This is the first time we've encountered the node, so we'll call if preorder
-        if order == Order::Pre { cb(c.node()); }
+        if order == Order::Pre {
+            cb(c.node());
+        }
 
         // Keep travelling down the tree as far as we can
         if c.goto_first_child() {
@@ -135,7 +151,9 @@ fn traverse_iterative<C: Cursor, F>(mut c: C, order: Order, mut cb: F) where F: 
         if c.goto_next_sibling() {
             // If we succeed in going to the previous nodes sibling,
             // we won't be encountering that node again, so we'll call if postorder
-            if order == Order::Post { cb(node); }
+            if order == Order::Post {
+                cb(node);
+            }
             continue;
         }
 
@@ -144,7 +162,9 @@ fn traverse_iterative<C: Cursor, F>(mut c: C, order: Order, mut cb: F) where F: 
         loop {
             // Since we're retracing back up the tree, this is the last time we'll encounter
             // this node, so we'll call if postorder
-            if order == Order::Post { cb(c.node()); }
+            if order == Order::Post {
+                cb(c.node());
+            }
             if !c.goto_parent() {
                 // We have arrived back at the root, so we are done.
                 return;
@@ -156,7 +176,9 @@ fn traverse_iterative<C: Cursor, F>(mut c: C, order: Order, mut cb: F) where F: 
                 // If we succeed in going to the previous node's sibling,
                 // we will go back to travelling down that sibling's tree, and we also
                 // won't be encountering the previous node again, so we'll call if postorder
-                if order == Order::Post { cb(node); }
+                if order == Order::Post {
+                    cb(node);
+                }
                 break;
             }
         }
@@ -165,11 +187,18 @@ fn traverse_iterative<C: Cursor, F>(mut c: C, order: Order, mut cb: F) where F: 
 
 /// Idiomatic recursive traversal of the tree; this version is easier to understand
 /// conceptually, but the recursion is actually unnecessary and can cause stack overflow.
-fn traverse_recursive<C: Cursor, F>(mut c: C, order: Order, mut cb: F) where F: FnMut(C::Node) {
+#[allow(dead_code)]
+fn traverse_recursive<C: Cursor, F>(mut c: C, order: Order, mut cb: F)
+where
+    F: FnMut(C::Node),
+{
     traverse_helper(&mut c, order, &mut cb);
 }
 
-fn traverse_helper<C: Cursor, F>(c: &mut C, order: Order, cb: &mut F) where F: FnMut(C::Node) {
+fn traverse_helper<C: Cursor, F>(c: &mut C, order: Order, cb: &mut F)
+where
+    F: FnMut(C::Node),
+{
     // If preorder, call the callback when we first touch the node
     if order == Order::Pre {
         cb(c.node());
@@ -204,13 +233,18 @@ impl<C> PreorderTraverse<C> {
     }
 }
 
-impl<C> Iterator for PreorderTraverse<C> where C: Cursor {
+impl<C> Iterator for PreorderTraverse<C>
+where
+    C: Cursor,
+{
     type Item = C::Node;
 
     fn next(&mut self) -> Option<Self::Item> {
         let c = match self.cursor.as_mut() {
-            None => {return None;}
-            Some(c) => c
+            None => {
+                return None;
+            }
+            Some(c) => c,
         };
 
         // We will always return the node we were on at the start;
@@ -240,32 +274,36 @@ impl<C> Iterator for PreorderTraverse<C> where C: Cursor {
             }
         }
 
-        return Some(node);
+        Some(node)
     }
 }
 
-
 struct PostorderTraverse<C> {
     cursor: Option<C>,
-    retracing: bool
+    retracing: bool,
 }
 
 impl<C> PostorderTraverse<C> {
     pub fn new(c: C) -> Self {
         PostorderTraverse {
             cursor: Some(c),
-            retracing: false
+            retracing: false,
         }
     }
 }
 
-impl<C> Iterator for PostorderTraverse<C> where C: Cursor {
+impl<C> Iterator for PostorderTraverse<C>
+where
+    C: Cursor,
+{
     type Item = C::Node;
 
     fn next(&mut self) -> Option<Self::Item> {
         let c = match self.cursor.as_mut() {
-            None => {return None;}
-            Some(c) => c
+            None => {
+                return None;
+            }
+            Some(c) => c,
         };
 
         // For the postorder traversal, we will only return a node when we are travelling back up
@@ -293,25 +331,25 @@ impl<C> Iterator for PostorderTraverse<C> where C: Cursor {
             }
         }
 
-        return Some(node);
+        Some(node)
     }
 }
 
 // Used for visibility purposes, in case this struct becomes public
 struct Traverse<C> {
-    inner: TraverseInner<C>
+    inner: TraverseInner<C>,
 }
 
 enum TraverseInner<C> {
     Post(PostorderTraverse<C>),
-    Pre(PreorderTraverse<C>)
+    Pre(PreorderTraverse<C>),
 }
 
 impl<C> Traverse<C> {
     pub fn new(c: C, order: Order) -> Self {
         let inner = match order {
             Order::Pre => TraverseInner::Pre(PreorderTraverse::new(c)),
-            Order::Post => TraverseInner::Post(PostorderTraverse::new(c))
+            Order::Post => TraverseInner::Post(PostorderTraverse::new(c)),
         };
         Self { inner }
     }
@@ -327,7 +365,7 @@ impl<'a> Traverse<TreeCursor<'a>> {
 /// Convenience method to traverse a tree-sitter [`Tree`] in an order according to `order`.
 ///
 /// [`Tree`]: tree_sitter::Tree
-pub fn traverse_tree(tree: &Tree, order: Order) -> impl FusedIterator<Item=Node> {
+pub fn traverse_tree(tree: &Tree, order: Order) -> impl FusedIterator<Item = Node> {
     return traverse(tree.walk(), order);
 }
 
@@ -336,18 +374,21 @@ pub fn traverse_tree(tree: &Tree, order: Order) -> impl FusedIterator<Item=Node>
 ///
 /// `cursor` must be at the root of the tree
 /// (i.e. `cursor.goto_parent()` must return false)
-pub fn traverse<C: Cursor>(mut cursor: C, order: Order) -> impl FusedIterator<Item=C::Node> {
+pub fn traverse<C: Cursor>(mut cursor: C, order: Order) -> impl FusedIterator<Item = C::Node> {
     assert!(!cursor.goto_parent());
-    return Traverse::new(cursor, order)
+    Traverse::new(cursor, order)
 }
 
-impl<C> Iterator for Traverse<C> where C: Cursor {
+impl<C> Iterator for Traverse<C>
+where
+    C: Cursor,
+{
     type Item = C::Node;
 
     fn next(&mut self) -> Option<Self::Item> {
         match self.inner {
             TraverseInner::Post(ref mut i) => i.next(),
-            TraverseInner::Pre(ref mut i) => i.next()
+            TraverseInner::Pre(ref mut i) => i.next(),
         }
     }
 }
@@ -359,14 +400,13 @@ impl<C> FusedIterator for Traverse<C> where C: Cursor {}
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tree_sitter::Parser;
 
-    const EX1: &str =
-r#"function double(x) {
+    const EX1: &str = r#"function double(x) {
     return 2 * x;
 }"#;
 
-    const EX2: &str =
-r#"
+    const EX2: &str = r#"
 // Intentionally invalid code below
 
 "123
@@ -392,13 +432,16 @@ function double(x) {
         assert_eq!(iterative_callback, iterator);
     }
 
-
     /// Helper function to generate a Tree from javascript
     fn get_tree(code: &str) -> Tree {
         let mut parser = Parser::new();
         let lang = tree_sitter_javascript::language();
-        parser.set_language(lang).expect("Error loading JavaScript grammar");
-        return parser.parse(code, None).expect("Error parsing provided code");
+        parser
+            .set_language(lang)
+            .expect("Error loading JavaScript grammar");
+        return parser
+            .parse(code, None)
+            .expect("Error parsing provided code");
     }
 
     #[test]
@@ -441,9 +484,9 @@ function double(x) {
 
     #[test]
     fn example() {
-        use tree_sitter::{Node, Tree};
         use std::collections::HashSet;
         use std::iter::FromIterator;
+        use tree_sitter::{Node, Tree};
         let tree: Tree = get_tree(EX1);
         let preorder: Vec<Node<'_>> = traverse(tree.walk(), Order::Pre).collect::<Vec<_>>();
         let postorder: Vec<Node<'_>> = traverse_tree(&tree, Order::Post).collect::<Vec<_>>();
