@@ -25,9 +25,9 @@ use tree_sitter_traversal::{traverse, traverse_tree, Order};
 fn get_tree() -> Tree {
     use tree_sitter::Parser;
     let mut parser = Parser::new();
-    let lang = tree_sitter_javascript::language();
-    parser.set_language(lang).expect("Error loading JavaScript grammar");
-    return parser.parse("function(x) { return x * 2; }", None).expect("Error parsing provided code");
+    let lang = tree_sitter_rust::language();
+    parser.set_language(lang).expect("Error loading Rust grammar");
+    return parser.parse("fn double(x: usize) -> usize { x * 2 }", None).expect("Error parsing provided code");
 }
 
 fn main() {

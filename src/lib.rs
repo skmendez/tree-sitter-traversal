@@ -16,9 +16,9 @@
 //! # fn get_tree() -> Tree {
 //! #     use tree_sitter::Parser;
 //! #     let mut parser = Parser::new();
-//! #     let lang = tree_sitter_javascript::language();
-//! #     parser.set_language(lang).expect("Error loading JavaScript grammar");
-//! #     return parser.parse("function(x) { return x * 2; }", None).expect("Error parsing provided code");
+//! #     let lang = tree_sitter_rust::language();
+//! #     parser.set_language(lang).expect("Error loading Rust grammar");
+//! #     return parser.parse("fn double(x: usize) -> usize { x * 2 }", None).expect("Error parsing provided code");
 //! # }
 //!
 //! // Non-existent method, imagine it gets a valid Tree with >1 node
@@ -448,13 +448,13 @@ function double(x: usize) -> usize {
         assert_eq!(iterative_callback, iterator);
     }
 
-    /// Helper function to generate a Tree from javascript
+    /// Helper function to generate a Tree from Rust code
     fn get_tree(code: &str) -> Tree {
         let mut parser = Parser::new();
         let lang = tree_sitter_rust::language();
         parser
             .set_language(lang)
-            .expect("Error loading JavaScript grammar");
+            .expect("Error loading Rust grammar");
         return parser
             .parse(code, None)
             .expect("Error parsing provided code");
