@@ -16,10 +16,7 @@ categories = ["algorithms", "data structures"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-tree-sitter = "*"
+tree-sitter = ">=0.20"
 
 [dev-dependencies]
 tree-sitter-javascript = "0.20.0"
-
-[build-dependencies]
-cc="*"
