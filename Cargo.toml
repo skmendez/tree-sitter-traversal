@@ -2,6 +2,16 @@
 name = "tree-sitter-traversal"
 version = "0.1.0"
 edition = "2021"
+license = "MIT"
+repository = "https://github.com/skmendez/tree-sitter-traversal"
+documentation = "https://docs.rs/tree-sitter-traversal/"
+authors = ["skmendez"]
+readme = "README.md"
+
+description = "Traversal of tree-sitter Trees and any arbitrary tree with a TreeCursor-like interface"
+
+keywords = ["tree-sitter", "traverse", "traversal", "tree"]
+categories = ["algorithms", "data structures"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
