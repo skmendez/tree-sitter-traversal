@@ -1,5 +1,34 @@
 use tree_sitter::{Parser, TreeCursor, Node, Tree};
 
+
+pub trait Cursor {
+    type NodeT;
+    fn goto_first_child(&mut self) -> bool;
+    fn goto_next_sibling(&mut self) -> bool;
+    fn goto_parent(&mut self) -> bool;
+    fn node(&self) -> Self::NodeT;
+}
+
+impl<'a> Cursor for TreeCursor<'a> {
+    type NodeT = Node<'a>;
+
+    fn goto_first_child(&mut self) -> bool {
+        self.goto_first_child()
+    }
+
+    fn goto_next_sibling(&mut self) -> bool {
+        self.goto_next_sibling()
+    }
+
+    fn goto_parent(&mut self) -> bool {
+        self.goto_parent()
+    }
+
+    fn node(&self) -> Self::NodeT {
+        self.node()
+    }
+}
+
 /// Order to iterate through the tree; for n-ary trees only
 /// Pre-order and Post-order make sense
 #[derive(Eq, PartialEq, Hash, Debug, Copy, Clone)]
@@ -88,18 +117,18 @@ fn traverse_helper<'a, F>(c: &mut TreeCursor<'a>, order: Order, cb: &mut F) wher
     }
 }
 
-struct PreorderTraverse<'a> {
-    cursor: Option<TreeCursor<'a>>,
+struct PreorderTraverse<C> {
+    cursor: Option<C>,
 }
 
-impl<'a> PreorderTraverse<'a> {
-    pub fn new(tree: &'a Tree) -> Self {
-        PreorderTraverse { cursor: Some(tree.walk()) }
+impl<C> PreorderTraverse<C> {
+    pub fn new(c: C) -> Self {
+        PreorderTraverse { cursor: Some(c) }
     }
 }
 
-impl<'a> Iterator for PreorderTraverse<'a> {
-    type Item = Node<'a>;
+impl<C> Iterator for PreorderTraverse<C> where C: Cursor {
+    type Item = C::NodeT;
 
     fn next(&mut self) -> Option<Self::Item> {
         let c = match self.cursor.as_mut() {
@@ -139,22 +168,22 @@ impl<'a> Iterator for PreorderTraverse<'a> {
 }
 
 
-struct PostorderTraverse<'a> {
-    cursor: Option<TreeCursor<'a>>,
+struct PostorderTraverse<C> {
+    cursor: Option<C>,
     retracing: bool
 }
 
-impl<'a> PostorderTraverse<'a> {
-    pub fn new(tree: &'a Tree) -> Self {
+impl<C> PostorderTraverse<C> {
+    pub fn new(c: C) -> Self {
         PostorderTraverse {
-            cursor: Some(tree.walk()),
+            cursor: Some(c),
             retracing: false
         }
     }
 }
 
-impl<'a> Iterator for PostorderTraverse<'a> {
-    type Item = Node<'a>;
+impl<C> Iterator for PostorderTraverse<C> where C: Cursor {
+    type Item = C::NodeT;
 
     fn next(&mut self) -> Option<Self::Item> {
         let c = match self.cursor.as_mut() {
@@ -191,31 +220,41 @@ impl<'a> Iterator for PostorderTraverse<'a> {
     }
 }
 
-struct Traverse<'a> {
-    inner: TraverseInner<'a>
+struct Traverse<C> {
+    inner: TraverseInner<C>
 }
 
-enum TraverseInner<'a> {
-    Post(PostorderTraverse<'a>),
-    Pre(PreorderTraverse<'a>)
+enum TraverseInner<C> {
+    Post(PostorderTraverse<C>),
+    Pre(PreorderTraverse<C>)
 }
 
-impl<'a> Traverse<'a> {
-    pub fn new(tree: &'a Tree, order: Order) -> Self {
+impl<C> Traverse<C> {
+    pub fn new(c: C, order: Order) -> Self {
         let inner = match order {
-            Order::Pre => TraverseInner::Pre(PreorderTraverse::new(tree)),
-            Order::Post => TraverseInner::Post(PostorderTraverse::new(tree))
+            Order::Pre => TraverseInner::Pre(PreorderTraverse::new(c)),
+            Order::Post => TraverseInner::Post(PostorderTraverse::new(c))
         };
         Self { inner }
     }
 }
 
-pub fn traverse_iter(tree: &Tree, order: Order) -> impl Iterator<Item=Node> {
-    return Traverse::new(tree, order);
+impl<'a> Traverse<TreeCursor<'a>> {
+    pub fn from_tree(tree: &'a Tree, order: Order) -> Self {
+        Traverse::new(tree.walk(), order)
+    }
 }
 
-impl<'a> Iterator for Traverse<'a> {
-    type Item = Node<'a>;
+pub fn traverse_iter_tree(tree: &Tree, order: Order) -> impl Iterator<Item=Node> {
+    return Traverse::from_tree(tree, order);
+}
+
+pub fn traverse_iter<C: Cursor>(c: C, order: Order) -> impl Iterator<Item=C::NodeT> {
+    return Traverse::new(c, order)
+}
+
+impl<C> Iterator for Traverse<C> where C: Cursor {
+    type Item = C::NodeT;
 
     fn next(&mut self) -> Option<Self::Item> {
         match self.inner {
@@ -263,7 +302,7 @@ function double(x, y, z=123) {
     #[test]
     fn new_eq() {
         let parsed = get_tree();
-        let t = PreorderTraverse::new(&parsed);
+        let t = traverse_iter_tree(&parsed, Order::Pre);
         let v = t.collect::<Vec<_>>();
         let mut e = Vec::new();
         eprintln!("{:?}", parsed.root_node().to_sexp());
@@ -276,7 +315,7 @@ function double(x, y, z=123) {
     #[test]
     fn postorder_eq() {
         let parsed = get_tree();
-        let t = traverse_iter(&parsed, Order::Post);
+        let t = traverse_iter(parsed.walk(), Order::Post);
         let v = t.collect::<Vec<_>>();
         let mut e = Vec::new();
         eprintln!("{:?}", parsed.root_node().to_sexp());
