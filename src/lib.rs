@@ -1,7 +1,6 @@
 //! Iterators to traverse tree-sitter [`Tree`]s using a [`TreeCursor`],
 //! with a [`Cursor`] trait to allow for traversing arbitrary n-ary trees.
 //!
-//!
 //! # Examples
 //!
 //! Basic usage:
@@ -42,8 +41,9 @@
 //! [`Tree`]: tree_sitter::Tree
 //! [`TreeCursor`]: tree_sitter::TreeCursor
 //! [`Cursor`]: crate::Cursor
+#![no_std]
 
-use std::iter::FusedIterator;
+use core::iter::FusedIterator;
 
 /// Trait which represents a stateful cursor in a n-ary tree.
 /// The cursor can be moved between nodes in the tree by the given methods,
@@ -410,8 +410,11 @@ impl<C> FusedIterator for Traverse<C> where C: Cursor {}
 
 #[cfg(test)]
 #[cfg(feature = "tree-sitter")]
-mod tests {
+mod tree_sitter_tests {
     use super::*;
+
+    extern crate std;
+    use std::vec::Vec;
     use tree_sitter::{Parser, Tree};
 
     const EX1: &str = r#"function double(x) {
@@ -508,5 +511,39 @@ function double(x) {
             <HashSet<_>>::from_iter(preorder.into_iter()),
             <HashSet<_>>::from_iter(postorder.into_iter())
         );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct Root;
+
+    // Root represents a tree where there's only one node, the root, and its type is the unit type
+    impl Cursor for Root {
+        type Node = ();
+
+        fn goto_first_child(&mut self) -> bool {
+            return false;
+        }
+
+        fn goto_parent(&mut self) -> bool {
+            return false;
+        }
+
+        fn goto_next_sibling(&mut self) -> bool {
+            return false;
+        }
+
+        fn node(&self) -> Self::Node {
+            ()
+        }
+    }
+
+    #[test]
+    fn test_root() {
+        assert_eq!(1, traverse(Root, Order::Pre).count());
+        assert_eq!(1, traverse(Root, Order::Post).count());
     }
 }
