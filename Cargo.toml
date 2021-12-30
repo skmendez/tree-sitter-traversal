@@ -1,0 +1,15 @@
+[package]
+name = "tree-sitter-traversal"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+tree-sitter = "*"
+
+[dev-dependencies]
+tree-sitter-javascript = "0.20.0"
+
+[build-dependencies]
+cc="*"
