@@ -417,7 +417,8 @@ mod tree_sitter_tests {
     use std::vec::Vec;
     use tree_sitter::{Parser, Tree};
 
-    const EX1: &str = r#"function double(x) {
+    const EX1: &str = r#"
+fn double(x: usize) -> usize {
     return 2 * x;
 }"#;
 
@@ -428,7 +429,7 @@ mod tree_sitter_tests {
 
 const DOUBLE = 2;
 
-function double(x) {
+function double(x: usize) -> usize {
     return DOUBLE * x;
 }"#;
 
@@ -450,7 +451,7 @@ function double(x) {
     /// Helper function to generate a Tree from javascript
     fn get_tree(code: &str) -> Tree {
         let mut parser = Parser::new();
-        let lang = tree_sitter_javascript::language();
+        let lang = tree_sitter_rust::language();
         parser
             .set_language(lang)
             .expect("Error loading JavaScript grammar");

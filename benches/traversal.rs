@@ -18,7 +18,7 @@ fn dogfood() -> Tree {
     let lang = tree_sitter_javascript::language();
     parser
         .set_language(lang)
-        .expect("Error loading JavaScript grammar");
+        .expect("Error loading Rust grammar");
     return parser
         .parse(code, None)
         .expect("Error parsing provided code");

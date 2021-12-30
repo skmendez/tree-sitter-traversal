@@ -13,7 +13,7 @@ Add this to your `Cargo.toml`
 
 ```toml
 [dependencies]
-tree-sitter-traversal = "0.1.1"
+tree-sitter-traversal = "0.1.2"
 ```
 
 ### Example
@@ -55,6 +55,6 @@ Though this library was designed to be used for `tree-sitter`, that usage is opt
 
 ```toml
 [dependencies.tree-sitter-traversal]
-version = "0.1.1"
+version = "0.1.2"
 default-features = false
 ```
